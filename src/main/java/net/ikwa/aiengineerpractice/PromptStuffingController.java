@@ -1,5 +1,6 @@
 package net.ikwa.aiengineerpractice;
 
+import net.ikwa.aiengineerpractice.advisors.TokenUsageAuditAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -26,7 +27,9 @@ public class PromptStuffingController {
         try {
 
             String message = chatClient.
-                    prompt().
+                    prompt()
+                            .advisors(new TokenUsageAuditAdvisor()).
+
                     system(systemPromptTemplate)
                     .user(userMessage)
                     .call().content();
