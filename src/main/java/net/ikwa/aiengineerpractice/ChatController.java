@@ -11,6 +11,8 @@ public class ChatController {
 
     private final ChatClient chatClient;
 
+
+
     // ChatClient is injected automatically from AiConfig
     public ChatController(ChatClient chatClient) {
         this.chatClient = chatClient;

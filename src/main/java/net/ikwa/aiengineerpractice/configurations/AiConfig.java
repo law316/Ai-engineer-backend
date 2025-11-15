@@ -8,6 +8,8 @@ import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+
 
 @Configuration
 public class AiConfig {
@@ -37,6 +39,9 @@ public class AiConfig {
                 .defaultAdvisors(new SimpleLoggerAdvisor())
                 .defaultSystem("Serve as an internal assistant")
                 .defaultUser("How can you help me")
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory)
+                        .build()) /// this line is red undellined red
+
                 .build();
     }
 }
