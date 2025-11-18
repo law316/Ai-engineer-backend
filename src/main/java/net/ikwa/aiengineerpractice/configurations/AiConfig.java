@@ -6,6 +6,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -33,9 +34,12 @@ public class AiConfig {
     @Bean
     public ChatClient chatClient(ChatClient.Builder chatClientBuilder,
                                  ChatMemory chatMemory) {
+       ChatOptions options =  ChatOptions.builder().model("gpt_4.1_mini").
+               maxTokens(100).temperature(0.8).build();
 
         return chatClientBuilder
                 .defaultAdvisors()
+                .defaultOptions(options)
                 .defaultAdvisors(new SimpleLoggerAdvisor())
                 .defaultSystem("Serve as an internal assistant")
                 .defaultUser("How can you help me")
