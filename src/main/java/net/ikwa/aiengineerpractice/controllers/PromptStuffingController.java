@@ -1,4 +1,4 @@
-package net.ikwa.aiengineerpractice;
+package net.ikwa.aiengineerpractice.controllers;
 
 import net.ikwa.aiengineerpractice.advisors.TokenUsageAuditAdvisor;
 import org.springframework.ai.chat.client.ChatClient;

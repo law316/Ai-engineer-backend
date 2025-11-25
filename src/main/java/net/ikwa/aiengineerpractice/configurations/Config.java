@@ -4,9 +4,13 @@ package net.ikwa.aiengineerpractice.configurations;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
 
@@ -14,27 +18,40 @@ import java.util.Arrays;
 public class Config {
 
     @Bean
-    public CorsFilter corsFilter() {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/register", "/api/login").permitAll()
+                        .anyRequest().permitAll()
+                );
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // ✅ Allowed origins (fixed spacing + removed trailing slash)
-        config.setAllowedOrigins(Arrays.asList(
-                "https://ai-engineering-frontend-zeta.vercel.app",
-                "http://localhost:8080"
-        ));
+        // Allow localhost and ALL Vercel frontend deployments
+        config.addAllowedOrigin("http://localhost:3000");
+        config.addAllowedOriginPattern("https://*.vercel.app");
 
-
-
-        // ✅ Allowed methods and headers
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("*"));
-        config.setAllowCredentials(true);
+        config.setExposedHeaders(Arrays.asList("*"));
+        config.setAllowCredentials(false);
         config.setMaxAge(3600L);
 
-        // ✅ Register configuration
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+        return source;
+    }
 
-        return new CorsFilter(source);
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }

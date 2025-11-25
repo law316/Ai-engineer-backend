@@ -2,6 +2,8 @@ package net.ikwa.aiengineerpractice.model;
 
 import jakarta.persistence.*;
 
+import java.util.List;
+
 @Entity
 public class RagModel {
 
@@ -15,8 +17,11 @@ public class RagModel {
 
     private int productPrice;
 
-    @Column(columnDefinition = "vector(1536)")  // Must match model dimensions
-    private float[] embedding;
+
+    @ElementCollection
+    private List<Float> embedding;
+
+
 
     // --- Getters and Setters ---
 
@@ -52,11 +57,11 @@ public class RagModel {
         this.productPrice = productPrice;
     }
 
-    public float[] getEmbedding() {
+    public List<Float> getEmbedding() {
         return embedding;
     }
 
-    public void setEmbedding(float[] embedding) {
+    public void setEmbedding(List<Float> embedding) {
         this.embedding = embedding;
     }
 }

@@ -1,4 +1,4 @@
-package net.ikwa.aiengineerpractice;
+package net.ikwa.aiengineerpractice.controllers;
 
 import net.ikwa.aiengineerpractice.dto.RagModelDTO;
 import net.ikwa.aiengineerpractice.model.RagModel;

@@ -1,4 +1,4 @@
-package net.ikwa.aiengineerpractice;
+package net.ikwa.aiengineerpractice.controllers;
 
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
