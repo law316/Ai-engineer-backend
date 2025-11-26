@@ -1,35 +1,42 @@
 package net.ikwa.aiengineerpractice.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Entity
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "rag_model")   // 👈 important: matches table in Supabase
 public class RagModel {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
 
+    // maps to product_name
     private String productName;
 
+    // maps to product_description
     private String productDescription;
 
-    private int productPrice;
+    // maps to product_price (numeric(12,2))
+    private BigDecimal productPrice;
 
-
-    @ElementCollection
+    // We do NOT map the pgvector column directly in JPA.
+    @Transient
     private List<Float> embedding;
-
-
 
     // --- Getters and Setters ---
 
-    public int getId() {
+    public Integer getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(Integer id) {
         this.id = id;
     }
 
@@ -49,11 +56,11 @@ public class RagModel {
         this.productDescription = productDescription;
     }
 
-    public int getProductPrice() {
+    public BigDecimal getProductPrice() {
         return productPrice;
     }
 
-    public void setProductPrice(int productPrice) {
+    public void setProductPrice(BigDecimal productPrice) {
         this.productPrice = productPrice;
     }
 

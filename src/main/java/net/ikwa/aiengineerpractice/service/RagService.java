@@ -8,10 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.math.BigDecimal;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class RagService {
@@ -22,42 +20,60 @@ public class RagService {
     @Autowired
     private EmbeddingModel embeddingModel;
 
+    // ✅ Convert float[] -> "[0.12, 0.34, ...]" for pgvector
+    private String toPgVectorString(float[] vector) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < vector.length; i++) {
+            if (i > 0) {
+                sb.append(","); // no space needed, pgvector accepts this
+            }
+            sb.append(vector[i]);
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    // ✅ Create + store product with embedding
     @Transactional
-    public RagModel createProduct(RagModelDTO dto) {
+    public void createProduct(RagModelDTO dto) {
 
         if (dto.getProductName() == null || dto.getProductName().trim().isEmpty() ||
                 dto.getProductDescription() == null || dto.getProductDescription().trim().isEmpty() ||
                 dto.getProductPrice() <= 0) {
-            throw new IllegalArgumentException("All fields are required");
+            throw new IllegalArgumentException("All fields are required and price must be > 0");
         }
 
+        // Text to embed
         String textToEmbed = dto.getProductName() + " " + dto.getProductDescription();
 
+        // 1. Get embedding from Spring AI
         float[] vector = embeddingModel.embed(textToEmbed);
 
-        List<Float> embeddingList = new ArrayList<>();
+        // 2. Convert to pgvector-string
+        String embeddingVector = toPgVectorString(vector);
 
-        for (float v : vector) {
-            embeddingList.add(v);
-        }
-        RagModel model = new RagModel();
-        model.setProductName(dto.getProductName());
-        model.setProductDescription(dto.getProductDescription());
-        model.setProductPrice(dto.getProductPrice());
-        model.setEmbedding(embeddingList);
+        // 3. Insert via native SQL
+        BigDecimal price = BigDecimal.valueOf(dto.getProductPrice());
 
-        return ragRepository.save(model);
+        ragRepository.insertWithEmbedding(
+                dto.getProductName(),
+                dto.getProductDescription(),
+                price,
+                embeddingVector
+        );
     }
 
+    // ✅ Search by query text
     public List<RagModel> search(String query) {
 
+        // 1. Embed search text
         float[] vector = embeddingModel.embed(query);
 
-        // Convert float[] → '{1.23, 4.56, ...}'
-        String vectorString = Arrays.toString(vector)
-                .replace("[", "{")
-                .replace("]", "}");
+        // 2. Convert to pgvector-string
+        String embeddingVector = toPgVectorString(vector);
 
-        return ragRepository.searchByEmbedding(vectorString);
+        // 3. Similarity search
+        return ragRepository.searchByEmbedding(embeddingVector);
     }
 }

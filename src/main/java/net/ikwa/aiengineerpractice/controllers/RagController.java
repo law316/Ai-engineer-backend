@@ -16,7 +16,6 @@ public class RagController {
     @Autowired
     private RagService ragService;
 
-    // ✅ ADD PRODUCT
     @PostMapping("/add")
     public ResponseEntity<?> ragAdd(@RequestBody RagModelDTO ragModelDTO) {
         try {
@@ -28,9 +27,8 @@ public class RagController {
         }
     }
 
-    // ✅ SEARCH PRODUCTS
     @GetMapping("/search")
-    public ResponseEntity<?> searchProducts(@RequestParam String query) {
+    public ResponseEntity<?> searchProducts(@RequestParam("query") String query) {
         try {
             List<RagModel> results = ragService.search(query);
             return ResponseEntity.ok(results);
