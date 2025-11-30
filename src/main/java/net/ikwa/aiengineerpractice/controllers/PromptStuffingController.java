@@ -28,7 +28,7 @@ public class PromptStuffingController {
         this.chatMessageService = chatMessageService;
     }
 
-    // 🔹 Small DTO so we can receive message + username + phoneNumber
+    // 🔹 Small DTO so we can receive message + username + phoneNumber (JSON)
     public static class ChatRequest {
         private String message;
         private String username;
@@ -56,7 +56,7 @@ public class PromptStuffingController {
         }
     }
 
-    // ✅ 1) TEXT-ONLY CHAT (using phoneNumber as conversationId + saving username/phone)
+    // ✅ 1) TEXT-ONLY CHAT (JSON) – UNCHANGED
     @PostMapping("/prompt")
     public ResponseEntity<String> userPromptSturfing(@RequestBody ChatRequest request) {
         try {
@@ -68,9 +68,9 @@ public class PromptStuffingController {
                 return ResponseEntity.badRequest().body("Phone number is required");
             }
 
-            String userMessage   = request.getMessage();
-            String username      = request.getUsername();
-            String phoneNumber   = request.getPhoneNumber();
+            String userMessage    = request.getMessage();
+            String username       = request.getUsername();
+            String phoneNumber    = request.getPhoneNumber();
             String conversationId = phoneNumber; // 🎯 group chats by phone
 
             // save user message – don’t let DB failure kill the AI response
@@ -116,7 +116,90 @@ public class PromptStuffingController {
         }
     }
 
-    // ✅ 2) IMAGE + TEXT EVALUATION (optionally log as history if phoneNumber provided)
+    // ✅ 1b) NEW: CHAT WITH IMAGE (multipart/form-data to /api/prompt)
+    @PostMapping(
+            value = "/prompt",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<String> userPromptWithImage(
+            @RequestParam("message") String message,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("phoneNumber") String phoneNumber,
+            @RequestParam(value = "username", required = false) String username
+    ) {
+        try {
+            if (message == null || message.isBlank()) {
+                return ResponseEntity.badRequest().body("Request message is empty");
+            }
+            if (phoneNumber == null || phoneNumber.isBlank()) {
+                return ResponseEntity.badRequest().body("Phone number is required");
+            }
+            if (file == null || file.isEmpty()) {
+                return ResponseEntity.badRequest().body("Image file is required");
+            }
+
+            String userMessage    = message;
+            String conversationId = phoneNumber;
+
+            // Determine mime type (fallback to JPEG) – SAME LOGIC as your working image code
+            String contentType = file.getContentType();
+            MimeType mimeType;
+            if (contentType != null) {
+                mimeType = MimeType.valueOf(contentType);
+            } else {
+                mimeType = MimeTypeUtils.IMAGE_JPEG;
+            }
+
+            // Save user message (mention image) – no image URL yet
+            try {
+                String combinedContent = userMessage + " [📷 user sent an image]";
+                chatMessageService.saveMessage(
+                        "user",
+                        combinedContent,
+                        conversationId,
+                        phoneNumber,
+                        username,
+                        null  // later you can store a real image URL
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            // 🔥 IMAGE-READING + TEXT – same style as your /imageupload snippet,
+            // but now with systemPromptTemplate + TokenUsageAuditAdvisor
+            String reply = chatClient
+                    .prompt()
+                    .advisors(new TokenUsageAuditAdvisor())
+                    .system(systemPromptTemplate)
+                    .user(userSpec -> userSpec
+                            .text(userMessage)
+                            .media(mimeType, file.getResource()))
+                    .call()
+                    .content();
+
+            // Save AI reply
+            try {
+                chatMessageService.saveMessage(
+                        "ai",
+                        reply,
+                        conversationId,
+                        phoneNumber,
+                        "CheapNaira AI",
+                        null
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            return ResponseEntity.ok(reply);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("something went wrong (image prompt)");
+        }
+    }
+
+    // ✅ 2) IMAGE + TEXT EVALUATION (optionally log as history if phoneNumber provided) – UNCHANGED
     @PostMapping(
             value = "/imageupload",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -146,8 +229,6 @@ public class PromptStuffingController {
                     .content();
 
             // 📝 Optionally save this as a "receipt" message in history
-            // We don't have a real URL here yet, so we log a text note for now.
-            // Later, when you add Cloudinary/S3, you can replace imageUrl with real URL.
             if (phoneNumber != null && !phoneNumber.isBlank()) {
                 String conversationId = phoneNumber;
                 String note = "📷 Receipt/image uploaded: " + describe;
