@@ -43,8 +43,15 @@ public class AdminChatController {
                 map.put("sender", m.getSender());
                 map.put("content", m.getContent());
                 map.put("createdAt", m.getCreatedAt());
+
+                // keep old key for safety
                 map.put("phonenumber", m.getPhoneNumber());
+                // add proper camelCase key your frontend expects
+                map.put("phoneNumber", m.getPhoneNumber());
+
                 map.put("username", m.getUsername());
+                map.put("imageUrl", m.getImageUrl());  // ✅ include image URL
+
                 dto.add(map);
             }
 
@@ -54,7 +61,6 @@ public class AdminChatController {
             return ResponseEntity.status(500)
                     .body("Error loading conversation " + conversationId + ": " + e.getMessage());
         }
-
     }
 
     public static class AdminReplyRequest {
@@ -120,6 +126,30 @@ public class AdminChatController {
             return ResponseEntity.status(500)
                     .body("Error sending admin reply: " + e.getMessage());
         }
+    }
 
+    // ✅ NEW: mark conversation as read (no-op, just to stop 404)
+    @PostMapping("/conversations/{conversationId}/read")
+    public ResponseEntity<?> markAsRead(@PathVariable String conversationId) {
+        // later you can hook into chatMessageService if you want
+        return ResponseEntity.ok().build();
+    }
+
+    // ✅ NEW: mark conversation as unread (no-op)
+    @PostMapping("/conversations/{conversationId}/unread")
+    public ResponseEntity<?> markAsUnread(@PathVariable String conversationId) {
+        return ResponseEntity.ok().build();
+    }
+
+    // ✅ NEW: mark conversation as resolved (no-op)
+    @PostMapping("/conversations/{conversationId}/resolve")
+    public ResponseEntity<?> resolve(@PathVariable String conversationId) {
+        return ResponseEntity.ok().build();
+    }
+
+    // ✅ NEW: return conversation back to AI (no-op)
+    @PostMapping("/conversations/{conversationId}/return-to-ai")
+    public ResponseEntity<?> returnToAI(@PathVariable String conversationId) {
+        return ResponseEntity.ok().build();
     }
 }

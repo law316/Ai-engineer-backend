@@ -12,6 +12,8 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Base64;
+
 @RestController
 @RequestMapping("/api")
 public class PromptStuffingController {
@@ -56,7 +58,7 @@ public class PromptStuffingController {
         }
     }
 
-    // ✅ 1) TEXT-ONLY CHAT (JSON) – UNCHANGED
+    // ✅ 1) TEXT-ONLY CHAT (JSON)
     @PostMapping("/prompt")
     public ResponseEntity<String> userPromptSturfing(@RequestBody ChatRequest request) {
         try {
@@ -116,7 +118,7 @@ public class PromptStuffingController {
         }
     }
 
-    // ✅ 1b) NEW: CHAT WITH IMAGE (multipart/form-data to /api/prompt)
+    // ✅ 1b) CHAT WITH IMAGE (multipart/form-data to /api/prompt)
     @PostMapping(
             value = "/prompt",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -141,7 +143,7 @@ public class PromptStuffingController {
             String userMessage    = message;
             String conversationId = phoneNumber;
 
-            // Determine mime type (fallback to JPEG) – SAME LOGIC as your working image code
+            // Determine mime type (fallback to JPEG)
             String contentType = file.getContentType();
             MimeType mimeType;
             if (contentType != null) {
@@ -150,7 +152,12 @@ public class PromptStuffingController {
                 mimeType = MimeTypeUtils.IMAGE_JPEG;
             }
 
-            // Save user message (mention image) – no image URL yet
+            // 🔥 Build base64 data URL for the *user* image
+            byte[] bytes = file.getBytes();
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+            String dataUrl = "data:" + mimeType.toString() + ";base64," + base64;
+
+            // 📝 Save user message + image
             try {
                 String combinedContent = userMessage + " [📷 user sent an image]";
                 chatMessageService.saveMessage(
@@ -159,14 +166,13 @@ public class PromptStuffingController {
                         conversationId,
                         phoneNumber,
                         username,
-                        null  // later you can store a real image URL
+                        dataUrl   // ✅ store image on user message
                 );
             } catch (Exception e) {
                 e.printStackTrace();
             }
 
-            // 🔥 IMAGE-READING + TEXT – same style as your /imageupload snippet,
-            // but now with systemPromptTemplate + TokenUsageAuditAdvisor
+            // 🔥 IMAGE-READING + TEXT – AI
             String reply = chatClient
                     .prompt()
                     .advisors(new TokenUsageAuditAdvisor())
@@ -177,7 +183,7 @@ public class PromptStuffingController {
                     .call()
                     .content();
 
-            // Save AI reply
+            // Save AI reply (no imageUrl needed)
             try {
                 chatMessageService.saveMessage(
                         "ai",
@@ -199,7 +205,7 @@ public class PromptStuffingController {
         }
     }
 
-    // ✅ 2) IMAGE + TEXT EVALUATION (optionally log as history if phoneNumber provided) – UNCHANGED
+    // ✅ 2) IMAGE + TEXT EVALUATION (receipt upload)
     @PostMapping(
             value = "/imageupload",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -228,10 +234,14 @@ public class PromptStuffingController {
                     .call()
                     .content();
 
-            // 📝 Optionally save this as a "receipt" message in history
+            // 📝 Save as "receipt" message in history
             if (phoneNumber != null && !phoneNumber.isBlank()) {
                 String conversationId = phoneNumber;
                 String note = "📷 Receipt/image uploaded: " + describe;
+
+                byte[] bytes = file.getBytes();
+                String base64 = Base64.getEncoder().encodeToString(bytes);
+                String dataUrl = "data:" + mimeType.toString() + ";base64," + base64;
 
                 try {
                     chatMessageService.saveMessage(
@@ -240,14 +250,13 @@ public class PromptStuffingController {
                             conversationId,
                             phoneNumber,
                             username,
-                            null  // imageUrl placeholder for future
+                            dataUrl
                     );
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
 
-            // 🔥 Return the actual description to the frontend
             return ResponseEntity.ok(description);
 
         } catch (Exception e) {
