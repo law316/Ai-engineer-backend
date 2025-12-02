@@ -34,7 +34,7 @@ public class AiConfig {
     @Bean
     public ChatClient chatClient(ChatClient.Builder chatClientBuilder,
                                  ChatMemory chatMemory) {
-       ChatOptions options =  ChatOptions.builder().model("gpt-4o-mini").
+       ChatOptions options =  ChatOptions.builder().model("gpt-5.1").
                maxTokens(100).temperature(0.8).build();
 
         return chatClientBuilder
