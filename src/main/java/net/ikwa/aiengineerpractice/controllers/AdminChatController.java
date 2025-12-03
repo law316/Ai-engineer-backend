@@ -112,7 +112,7 @@ public class AdminChatController {
                     : "CheapNaira Management";
 
             chatMessageService.saveMessage(
-                    "management",              // 🔥 NEW sender
+                    "management",              // 🔥 admin sender
                     req.getMessage(),
                     conversationId,
                     phoneNumber,
@@ -128,28 +128,46 @@ public class AdminChatController {
         }
     }
 
-    // ✅ NEW: mark conversation as read (no-op, just to stop 404)
+    // ✅ mark conversation as read (no-op for now)
     @PostMapping("/conversations/{conversationId}/read")
     public ResponseEntity<?> markAsRead(@PathVariable String conversationId) {
-        // later you can hook into chatMessageService if you want
         return ResponseEntity.ok().build();
     }
 
-    // ✅ NEW: mark conversation as unread (no-op)
+    // ✅ mark conversation as unread (no-op)
     @PostMapping("/conversations/{conversationId}/unread")
     public ResponseEntity<?> markAsUnread(@PathVariable String conversationId) {
         return ResponseEntity.ok().build();
     }
 
-    // ✅ NEW: mark conversation as resolved (no-op)
+    // ✅ mark conversation as resolved (no-op)
     @PostMapping("/conversations/{conversationId}/resolve")
     public ResponseEntity<?> resolve(@PathVariable String conversationId) {
         return ResponseEntity.ok().build();
     }
 
-    // ✅ NEW: return conversation back to AI (no-op)
+    // ✅ return conversation back to AI → ACTUALLY UNLOCK
     @PostMapping("/conversations/{conversationId}/return-to-ai")
     public ResponseEntity<?> returnToAI(@PathVariable String conversationId) {
-        return ResponseEntity.ok().build();
+        try {
+            // In your design, conversationId == phoneNumber
+            String phoneNumber = conversationId;
+
+            // Save a small control message from AI so the last non-user sender is NOT management anymore
+            chatMessageService.saveMessage(
+                    "ai",
+                    "CheapNaira AI is now handling this chat again. You can continue normally.",
+                    conversationId,
+                    phoneNumber,
+                    "CheapNaira AI",
+                    null
+            );
+
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500)
+                    .body("Error returning conversation to AI: " + e.getMessage());
+        }
     }
 }

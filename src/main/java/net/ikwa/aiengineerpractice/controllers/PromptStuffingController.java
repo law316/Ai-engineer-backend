@@ -1,8 +1,10 @@
 package net.ikwa.aiengineerpractice.controllers;
 
 import net.ikwa.aiengineerpractice.advisors.TokenUsageAuditAdvisor;
+import net.ikwa.aiengineerpractice.model.ChatMessage;
 import net.ikwa.aiengineerpractice.service.ChatMessageService;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Base64;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -58,6 +61,36 @@ public class PromptStuffingController {
         }
     }
 
+    // 🔍 Helper: check if management is currently the last non-user sender
+    private boolean isManagementActive(String conversationId) {
+        try {
+            List<ChatMessage> history = chatMessageService.getMessagesForConversation(conversationId);
+            if (history == null || history.isEmpty()) {
+                return false;
+            }
+
+            ChatMessage lastNonUser = null;
+            for (ChatMessage m : history) {
+                String sender = m.getSender();
+                if (sender == null) continue;
+                if (!"user".equalsIgnoreCase(sender)) {
+                    lastNonUser = m;
+                }
+            }
+
+            if (lastNonUser == null) {
+                return false;
+            }
+
+            // 🔒 lock if last non-user is management
+            return "management".equalsIgnoreCase(lastNonUser.getSender());
+        } catch (Exception e) {
+            e.printStackTrace();
+            // fail-open: if DB check fails, don't block AI
+            return false;
+        }
+    }
+
     // ✅ 1) TEXT-ONLY CHAT (JSON)
     @PostMapping("/prompt")
     public ResponseEntity<String> userPromptSturfing(@RequestBody ChatRequest request) {
@@ -73,9 +106,9 @@ public class PromptStuffingController {
             String userMessage    = request.getMessage();
             String username       = request.getUsername();
             String phoneNumber    = request.getPhoneNumber();
-            String conversationId = phoneNumber; // 🎯 group chats by phone
+            String conversationId = phoneNumber; // 🎯 group chats by phone for memory + DB
 
-            // save user message – don’t let DB failure kill the AI response
+            // 📝 Save user message – don’t let DB failure kill the AI response
             try {
                 chatMessageService.saveMessage(
                         "user",
@@ -89,8 +122,33 @@ public class PromptStuffingController {
                 e.printStackTrace();
             }
 
+            // ⛔ Management lock: if last non-user message is from "management", AI must stay quiet
+            boolean managementActive = isManagementActive(conversationId);
+            if (managementActive) {
+                String reply = "Management is already handling this for you boss. Please give them a moment to update you.";
+                try {
+                    // 🔒 save as management, so lock stays active
+                    chatMessageService.saveMessage(
+                            "management",
+                            reply,
+                            conversationId,
+                            phoneNumber,
+                            "CheapNaira Management",
+                            null
+                    );
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return ResponseEntity.ok(reply);
+            }
+
+            // 🔥 call model with:
+            // - systemPromptTemplate (your big CheapNaira prompt)
+            // - memory (via CONVERSATION_ID)
+            // - TokenUsageAuditAdvisor for logging/usage
             String reply = chatClient
                     .prompt()
+                    .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                     .advisors(new TokenUsageAuditAdvisor())
                     .system(systemPromptTemplate)
                     .user(userMessage)
@@ -157,7 +215,7 @@ public class PromptStuffingController {
             String base64 = Base64.getEncoder().encodeToString(bytes);
             String dataUrl = "data:" + mimeType.toString() + ";base64," + base64;
 
-            // 📝 Save user message + image
+            // 📝 Save user message + image in your own DB
             try {
                 String combinedContent = userMessage + " [📷 user sent an image]";
                 chatMessageService.saveMessage(
@@ -172,9 +230,30 @@ public class PromptStuffingController {
                 e.printStackTrace();
             }
 
-            // 🔥 IMAGE-READING + TEXT – AI
+            // ⛔ Management lock for image prompts too
+            boolean managementActive = isManagementActive(conversationId);
+            if (managementActive) {
+                String reply = "Management is already handling this for you boss. Please give them a moment to update you.";
+                try {
+                    // 🔒 save as management so lock stays
+                    chatMessageService.saveMessage(
+                            "management",
+                            reply,
+                            conversationId,
+                            phoneNumber,
+                            "CheapNaira Management",
+                            null
+                    );
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return ResponseEntity.ok(reply);
+            }
+
+            // 🔥 IMAGE-READING + TEXT – AI with memory + system prompt
             String reply = chatClient
                     .prompt()
+                    .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                     .advisors(new TokenUsageAuditAdvisor())
                     .system(systemPromptTemplate)
                     .user(userSpec -> userSpec
@@ -226,22 +305,37 @@ public class PromptStuffingController {
                 mimeType = MimeTypeUtils.IMAGE_JPEG;
             }
 
-            String description = chatClient
-                    .prompt()
-                    .user(userSpec -> userSpec
-                            .text(describe)
-                            .media(mimeType, file.getResource()))
-                    .call()
-                    .content();
+            String conversationId = (phoneNumber != null && !phoneNumber.isBlank())
+                    ? phoneNumber
+                    : "anonymous-image";
 
-            // 📝 Save as "receipt" message in history
+            // ⛔ If management is active on this conversation, don't let AI override them
+            boolean managementActive = isManagementActive(conversationId);
+
+            String description;
+            if (managementActive) {
+                description = "Management is already handling this for you boss. They will review the receipt and update you.";
+            } else {
+                // 🔎 Let the model describe/check the image with your system prompt + memory (if phoneNumber present)
+                description = chatClient
+                        .prompt()
+                        .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                        .advisors(new TokenUsageAuditAdvisor())
+                        .system(systemPromptTemplate)
+                        .user(userSpec -> userSpec
+                                .text(describe)
+                                .media(mimeType, file.getResource()))
+                        .call()
+                        .content();
+            }
+
+            // 📝 Save as "receipt" message in history (your DB)
             if (phoneNumber != null && !phoneNumber.isBlank()) {
-                String conversationId = phoneNumber;
-                String note = "📷 Receipt/image uploaded: " + describe;
-
                 byte[] bytes = file.getBytes();
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 String dataUrl = "data:" + mimeType.toString() + ";base64," + base64;
+
+                String note = "📷 Receipt/image uploaded: " + describe;
 
                 try {
                     chatMessageService.saveMessage(
@@ -251,6 +345,23 @@ public class PromptStuffingController {
                             phoneNumber,
                             username,
                             dataUrl
+                    );
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                try {
+                    // Save the description too (label as ai when not locked, management when locked)
+                    String sender = managementActive ? "management" : "ai";
+                    String name   = managementActive ? "CheapNaira Management" : "CheapNaira AI";
+
+                    chatMessageService.saveMessage(
+                            sender,
+                            description,
+                            conversationId,
+                            phoneNumber,
+                            name,
+                            null
                     );
                 } catch (Exception e) {
                     e.printStackTrace();
