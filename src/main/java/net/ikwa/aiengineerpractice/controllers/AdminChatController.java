@@ -66,7 +66,8 @@ public class AdminChatController {
     public static class AdminReplyRequest {
         private String message;
         private String phoneNumber;   // conversationId in your design
-        private String username;      // optional: admin name
+        private String username;
+        private String imageUrl;// optional: admin name
 
         public String getMessage() {
             return message;
@@ -90,6 +91,14 @@ public class AdminChatController {
 
         public void setUsername(String username) {
             this.username = username;
+        }
+
+        public String getImageUrl() {
+            return imageUrl;
+        }
+
+        public void setImageUrl(String imageUrl) {
+            this.imageUrl = imageUrl;
         }
     }
 
@@ -117,7 +126,7 @@ public class AdminChatController {
                     conversationId,
                     phoneNumber,
                     adminName,
-                    null                      // imageUrl placeholder
+                    req.getImageUrl()                     // imageUrl placeholder
             );
 
             return ResponseEntity.ok().build();
@@ -156,7 +165,7 @@ public class AdminChatController {
             // Save a small control message from AI so the last non-user sender is NOT management anymore
             chatMessageService.saveMessage(
                     "ai",
-                    "CheapNaira AI is now handling this chat again. You can continue normally.",
+                    "CheapNaira Customer service agent is now handling this chat again. You can continue normally.",
                     conversationId,
                     phoneNumber,
                     "CheapNaira AI",

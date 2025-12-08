@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/signup")
 public class SignupController {
@@ -33,5 +35,11 @@ public class SignupController {
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error registering user: " + e.getMessage());
         }
+    }
+    // 🔹 NEW: list all users (username + phoneNumber)
+    @GetMapping("/all")
+    public ResponseEntity<List<SignupModel>> getAllUsers() {
+        List<SignupModel> users = signupService.getAllUsers();
+        return ResponseEntity.ok(users);
     }
 }

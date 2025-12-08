@@ -38,6 +38,9 @@ public class Config {
         // Allow localhost and ALL Vercel frontend deployments
         config.addAllowedOrigin("http://localhost:3000");
         config.addAllowedOriginPattern("https://*.vercel.app");
+        // ✅ Custom production domains
+        config.addAllowedOrigin("https://cheapnaira.com");
+        config.addAllowedOrigin("https://www.cheapnaira.com");
 
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("*"));

@@ -3,6 +3,7 @@ package net.ikwa.aiengineerpractice.controllers;
 import net.ikwa.aiengineerpractice.advisors.TokenUsageAuditAdvisor;
 import net.ikwa.aiengineerpractice.model.ChatMessage;
 import net.ikwa.aiengineerpractice.service.ChatMessageService;
+import net.ikwa.aiengineerpractice.service.RateService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,14 +24,17 @@ public class PromptStuffingController {
 
     private final ChatClient chatClient;
     private final ChatMessageService chatMessageService;
+    private final RateService rateService; // ✅ NEW
 
     @Value("classpath:/promptTemplate/systemPromptTemplate.st")
     Resource systemPromptTemplate;
 
     public PromptStuffingController(ChatClient.Builder chatClientBuilder,
-                                    ChatMessageService chatMessageService) {
+                                    ChatMessageService chatMessageService,
+                                    RateService rateService) { // ✅ NEW ARG
         this.chatClient = chatClientBuilder.build();
         this.chatMessageService = chatMessageService;
+        this.rateService = rateService; // ✅ ASSIGN
     }
 
     // 🔹 Small DTO so we can receive message + username + phoneNumber (JSON)
@@ -91,6 +95,24 @@ public class PromptStuffingController {
         }
     }
 
+    // ✅ Helper: detect questions about rates (very simple, can improve later)
+    private boolean looksLikeRateQuestion(String msg) {
+        if (msg == null) return false;
+        String m = msg.toLowerCase();
+
+        return m.contains("rate")
+                || m.contains("rates")
+                || m.contains("how much per")
+                || m.contains("buy dollar")
+                || m.contains("sell dollar")
+                || m.contains("deriv rate")
+                || m.contains("deriv rates")
+                || m.contains("crypto rate")
+                || m.contains("crypto rates")
+                || m.contains("usd rate")
+                || m.contains("today rate");
+    }
+
     // ✅ 1) TEXT-ONLY CHAT (JSON)
     @PostMapping("/prompt")
     public ResponseEntity<String> userPromptSturfing(@RequestBody ChatRequest request) {
@@ -125,7 +147,7 @@ public class PromptStuffingController {
             // ⛔ Management lock: if last non-user message is from "management", AI must stay quiet
             boolean managementActive = isManagementActive(conversationId);
             if (managementActive) {
-                String reply = "Management is already handling this for you boss. Please give them a moment to update you.";
+                String reply = "";
                 try {
                     // 🔒 save as management, so lock stays active
                     chatMessageService.saveMessage(
@@ -139,6 +161,33 @@ public class PromptStuffingController {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+                return ResponseEntity.ok("");
+            }
+
+            // ✅ If it looks like a rate question → answer from DB, not model
+            if (looksLikeRateQuestion(userMessage)) {
+                String reply;
+                try {
+                    reply = rateService.buildRateMessage(); // 📊 pull from database
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    // fallback if rates fail: at least respond gracefully
+                    reply = "I couldn't load the current rates right now. Please try again in a moment, or ask management to confirm for you.";
+                }
+
+                try {
+                    chatMessageService.saveMessage(
+                            "ai",
+                            reply,
+                            conversationId,
+                            phoneNumber,
+                            "CheapNaira AI",
+                            null
+                    );
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
                 return ResponseEntity.ok(reply);
             }
 
@@ -233,7 +282,7 @@ public class PromptStuffingController {
             // ⛔ Management lock for image prompts too
             boolean managementActive = isManagementActive(conversationId);
             if (managementActive) {
-                String reply = "Management is already handling this for you boss. Please give them a moment to update you.";
+                String reply = "noted management typing.....";
                 try {
                     // 🔒 save as management so lock stays
                     chatMessageService.saveMessage(
@@ -314,7 +363,7 @@ public class PromptStuffingController {
 
             String description;
             if (managementActive) {
-                description = "Management is already handling this for you boss. They will review the receipt and update you.";
+                description = "management typing please wait......";
             } else {
                 // 🔎 Let the model describe/check the image with your system prompt + memory (if phoneNumber present)
                 description = chatClient
