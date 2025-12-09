@@ -3,6 +3,7 @@ package net.ikwa.aiengineerpractice.service;
 import net.ikwa.aiengineerpractice.dto.RagModelDTO;
 import net.ikwa.aiengineerpractice.model.RagModel;
 import net.ikwa.aiengineerpractice.repo.RagRepository;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,9 @@ public class RagService {
 
     @Autowired
     private EmbeddingModel embeddingModel;
+
+    @Autowired
+    private ChatClient chatClient;
 
     // ✅ Convert float[] -> "[0.12, 0.34, ...]" for pgvector
     private String toPgVectorString(float[] vector) {
@@ -75,5 +79,25 @@ public class RagService {
 
         // 3. Similarity search
         return ragRepository.searchByEmbedding(embeddingVector);
+    }
+
+    public String makeNaturalResponse(String query, List<RagModel> results) {
+
+        // Convert products to text for the model
+        StringBuilder context = new StringBuilder();
+        for (RagModel p : results) {
+            context.append("Product: ").append(p.getProductName())
+                    .append("\nDescription: ").append(p.getProductDescription())
+                    .append("\nPrice: ").append(p.getProductPrice())
+                    .append("\n\n");
+        }
+
+        // Call AI
+        return chatClient.prompt()
+                .system("You are a friendly and professional customer support assistant.")
+                .user("The user searched for: " + query +
+                        "\nHere are the product details from RAG:\n" + context)
+                .call()
+                .content();
     }
 }

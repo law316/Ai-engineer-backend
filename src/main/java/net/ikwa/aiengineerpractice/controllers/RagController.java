@@ -31,7 +31,11 @@ public class RagController {
     public ResponseEntity<?> searchProducts(@RequestParam("query") String query) {
         try {
             List<RagModel> results = ragService.search(query);
-            return ResponseEntity.ok(results);
+            // Now generate AI answer
+            String aiResponse = ragService.makeNaturalResponse(query, results);
+
+
+            return ResponseEntity.ok(aiResponse);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(400).body("Error: " + e.getMessage());
