@@ -34,7 +34,7 @@ public class AdminChatController {
     public ResponseEntity<?> getConversation(@PathVariable String conversationId) {
         try {
             List<ChatMessage> messages =
-                    chatMessageService.getMessagesForConversation(conversationId);
+                    chatMessageService.getMessagesForConversation(conversationId, 50);
 
             List<Map<String, Object>> dto = new ArrayList<>();
             for (ChatMessage m : messages) {
@@ -165,7 +165,7 @@ public class AdminChatController {
             // Save a small control message from AI so the last non-user sender is NOT management anymore
             chatMessageService.saveMessage(
                     "ai",
-                    "CheapNaira Customer service agent is now handling this chat again. You can continue normally.",
+                    "Customer service Sarah now Chatting",
                     conversationId,
                     phoneNumber,
                     "CheapNaira AI",

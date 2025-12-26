@@ -32,4 +32,23 @@ public interface RagRepository extends JpaRepository<RagModel, Integer> {
         LIMIT 5
     """, nativeQuery = true)
     List<RagModel> searchByEmbedding(String embeddingVector);
+
+    @Query(value = """
+        SELECT COUNT(*) 
+        FROM rag_model 
+        WHERE product_price = 1
+    """, nativeQuery = true)
+    long countTrainingDocuments();
+
+    // ✅ Latest training docs (uploads use price = 1)
+    @Query(value = """
+    SELECT * FROM rag_model
+    WHERE product_price = 1
+    ORDER BY id DESC
+    LIMIT 4
+""", nativeQuery = true)
+    List<RagModel> findRecentTrainingDocs();
+
+
 }
+

@@ -266,7 +266,7 @@ public class PromptStuffingController {
 
             // 📝 Save user message + image in your own DB
             try {
-                String combinedContent = userMessage + " [📷 user sent an image]";
+                String combinedContent = userMessage + " ";
                 chatMessageService.saveMessage(
                         "user",
                         combinedContent,
@@ -282,7 +282,7 @@ public class PromptStuffingController {
             // ⛔ Management lock for image prompts too
             boolean managementActive = isManagementActive(conversationId);
             if (managementActive) {
-                String reply = "noted management typing.....";
+                String reply = "";
                 try {
                     // 🔒 save as management so lock stays
                     chatMessageService.saveMessage(
@@ -363,7 +363,7 @@ public class PromptStuffingController {
 
             String description;
             if (managementActive) {
-                description = "management typing please wait......";
+                description = "please wait..";
             } else {
                 // 🔎 Let the model describe/check the image with your system prompt + memory (if phoneNumber present)
                 description = chatClient
@@ -384,7 +384,7 @@ public class PromptStuffingController {
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 String dataUrl = "data:" + mimeType.toString() + ";base64," + base64;
 
-                String note = "📷 Receipt/image uploaded: " + describe;
+                String note = "📷 Receipt/check and: " + describe;
 
                 try {
                     chatMessageService.saveMessage(
@@ -424,4 +424,7 @@ public class PromptStuffingController {
             return ResponseEntity.status(500).body("error describing image");
         }
     }
+
+
+
 }

@@ -41,6 +41,9 @@ public class Config {
         // ✅ Custom production domains
         config.addAllowedOrigin("https://cheapnaira.com");
         config.addAllowedOrigin("https://www.cheapnaira.com");
+        config.addAllowedOrigin("https://www.winsbegindash.online");
+        config.addAllowedOriginPattern("https://*.netlify.app");
+
 
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("*"));
