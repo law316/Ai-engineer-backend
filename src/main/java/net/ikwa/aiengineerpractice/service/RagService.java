@@ -6,6 +6,7 @@ import net.ikwa.aiengineerpractice.repo.RagRepository;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,18 +24,26 @@ public class RagService {
 
     private final RagRepository ragRepository;
     private final EmbeddingModel embeddingModel;
-    private final ChatClient chatClient;
+    private final ChatClient ragChatClient;
+    private final ChatClient ragVisionChatClient;
 
     @Autowired
-    public RagService(RagRepository ragRepository,
-                      EmbeddingModel embeddingModel,
-                      ChatClient.Builder chatClientBuilder) {
+    public RagService(
+            RagRepository ragRepository,
+            EmbeddingModel embeddingModel,
+            @Qualifier("ragChatClient") ChatClient ragChatClient,
+            @Qualifier("ragVisionChatClient") ChatClient ragVisionChatClient) {
         this.ragRepository = ragRepository;
         this.embeddingModel = embeddingModel;
-        this.chatClient = chatClientBuilder.build();
+        this.ragChatClient = ragChatClient;
+        this.ragVisionChatClient = ragVisionChatClient;
     }
 
-    // ✅ Convert float[] -> "[0.12,0.34,...]" for pgvector
+    // ... rest of your methods
+
+
+
+    // Convert float[] -> "[0.12,0.34,...]" for pgvector
     private String toPgVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder();
         sb.append('[');
@@ -46,7 +55,7 @@ public class RagService {
         return sb.toString();
     }
 
-    // ✅ Create + store product with embedding (UNCHANGED)
+    // Create + store product with embedding
     @Transactional
     public void createProduct(RagModelDTO dto) {
         if (dto.getProductName() == null || dto.getProductName().trim().isEmpty() ||
@@ -56,10 +65,8 @@ public class RagService {
         }
 
         String textToEmbed = dto.getProductName() + " " + dto.getProductDescription();
-
         float[] vector = embeddingModel.embed(textToEmbed);
         String embeddingVector = toPgVectorString(vector);
-
         BigDecimal price = BigDecimal.valueOf(dto.getProductPrice());
 
         ragRepository.insertWithEmbedding(
@@ -70,7 +77,7 @@ public class RagService {
         );
     }
 
-    // ✅ NEW: ingest an uploaded document WITHOUT touching createProduct()
+    // Ingest uploaded document
     @Transactional
     public Map<String, Object> ingestDocument(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
@@ -78,19 +85,13 @@ public class RagService {
         }
 
         String originalName = file.getOriginalFilename();
-        String safeName = (originalName == null || originalName.isBlank())
-                ? "Uploaded document"
-                : originalName;
+        String safeName = (originalName == null || originalName.isBlank()) ? "Uploaded document" : originalName;
 
-        // OLD SIMPLE LOGIC THAT WORKED
         String text = extractTextFromFile(file);
-
         String textToEmbed = safeName + " " + text;
-
         float[] vector = embeddingModel.embed(textToEmbed);
         String embeddingVector = toPgVectorString(vector);
-
-        BigDecimal price = BigDecimal.ONE; // document marker
+        BigDecimal price = BigDecimal.ONE; // marker for docs
 
         ragRepository.insertWithEmbedding(
                 safeName,
@@ -109,41 +110,26 @@ public class RagService {
         return response;
     }
 
-
-    // ✅ Text extraction (Tika / PDF support handled here)
+    // Extract text from file
     private String extractTextFromFile(MultipartFile file) throws IOException {
-        String filename = file.getOriginalFilename() != null
-                ? file.getOriginalFilename().toLowerCase()
-                : "";
-
-        String contentType = file.getContentType() != null
-                ? file.getContentType().toLowerCase()
-                : "";
+        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        String contentType = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
 
         // Plain text
         if (contentType.contains("text") || filename.endsWith(".txt") || filename.endsWith(".md")) {
             return new String(file.getBytes());
         }
 
-        // PDF (OLD UNLIMITED VERSION THAT WORKED)
+        // PDF
         if (contentType.contains("pdf") || filename.endsWith(".pdf")) {
             try {
-                org.apache.tika.parser.AutoDetectParser parser =
-                        new org.apache.tika.parser.AutoDetectParser();
-                org.apache.tika.metadata.Metadata metadata =
-                        new org.apache.tika.metadata.Metadata();
-                org.apache.tika.sax.BodyContentHandler handler =
-                        new org.apache.tika.sax.BodyContentHandler(-1);
+                org.apache.tika.parser.AutoDetectParser parser = new org.apache.tika.parser.AutoDetectParser();
+                org.apache.tika.metadata.Metadata metadata = new org.apache.tika.metadata.Metadata();
+                org.apache.tika.sax.BodyContentHandler handler = new org.apache.tika.sax.BodyContentHandler(-1);
 
                 try (java.io.InputStream stream = file.getInputStream()) {
-                    parser.parse(
-                            stream,
-                            handler,
-                            metadata,
-                            new org.apache.tika.parser.ParseContext()
-                    );
+                    parser.parse(stream, handler, metadata, new org.apache.tika.parser.ParseContext());
                 }
-
                 return handler.toString();
             } catch (Exception e) {
                 throw new IOException("Failed to extract text from PDF", e);
@@ -153,192 +139,206 @@ public class RagService {
         return new String(file.getBytes());
     }
 
-
-    // ✅ Search by query text (UNCHANGED)
+    // Search by query text
     public List<RagModel> search(String query) {
         float[] vector = embeddingModel.embed(query);
         String embeddingVector = toPgVectorString(vector);
         return ragRepository.searchByEmbedding(embeddingVector);
     }
 
-    // 🔍 Helper: detect "document-style" entries (CVs, PDFs, knowledge docs)
+    // Detect document-style entries (PDF, CV, knowledge docs)
     private boolean isDocumentStyleEntry(RagModel p) {
         String name = p.getProductName() != null ? p.getProductName() : "";
         String lowerName = name.toLowerCase();
 
-        boolean looksLikeFile =
-                lowerName.endsWith(".pdf") ||
-                        lowerName.endsWith(".doc") ||
-                        lowerName.endsWith(".docx");
-
-        // Our ingestDocument uses price = 1 for docs
-        boolean hasTinyPrice = false;
-        if (p.getProductPrice() != null) {
-            hasTinyPrice = p.getProductPrice().compareTo(BigDecimal.valueOf(5)) <= 0;
-        }
+        boolean looksLikeFile = lowerName.endsWith(".pdf") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx");
+        boolean hasTinyPrice = p.getProductPrice() != null && p.getProductPrice().compareTo(BigDecimal.valueOf(5)) <= 0;
 
         return looksLikeFile || hasTinyPrice;
     }
 
-    public String makeNaturalResponse(String query, List<RagModel> results) {
-        if (results == null || results.isEmpty()) {
-            return "I couldn’t find any clear match for \"" + query + "\" right now.";
+    // Generate AI natural response
+    public String makeNaturalResponse(String query, List<RagModel> results, String conversationId) {
+        String qLower = query.toLowerCase().trim();
+
+        // ✅ HANDLE GREETINGS WITHOUT RAG CONTEXT
+        if (isGreeting(qLower)) {
+            return handleGreeting(qLower, conversationId);
         }
 
-        String qLower = query.toLowerCase();
+        // ✅ HANDLE EMPTY RESULTS BETTER
+        if (results == null || results.isEmpty()) {
+            return "I'm here to help with your health questions. Could you please describe your symptoms or tell me what medication information you need?";
+        }
 
-        // Is the user likely asking for a profile / CV / document?
-        boolean askingForProfile =
-                qLower.contains("cv") ||
-                        qLower.contains("resume") ||
-                        qLower.contains("profile") ||
-                        qLower.contains("about joshua") ||
-                        qLower.contains("about me") ||
-                        qLower.contains("who is");
+        // Detect query type
+        boolean askingForProfile = qLower.contains("cv") ||
+                qLower.contains("resume") ||
+                qLower.contains("profile") ||
+                qLower.contains("about joshua") ||
+                qLower.contains("about me") ||
+                qLower.contains("who is");
 
-        // 1) Filter results depending on query type
+        // Filter results
         List<RagModel> filtered = new ArrayList<>();
         for (RagModel p : results) {
             boolean docStyle = isDocumentStyleEntry(p);
-
-            if (askingForProfile) {
-                // For profile/document questions: prefer document-style entries
-                if (docStyle) {
-                    filtered.add(p);
-                }
-            } else {
-                // For normal questions (pricing, products, etc.): ignore document-style CV rows
-                if (!docStyle) {
-                    filtered.add(p);
-                }
+            if ((askingForProfile && docStyle) || (!askingForProfile && !docStyle)) {
+                filtered.add(p);
             }
-
-            if (filtered.size() >= 3) {
-                break; // cap context to 3 items
-            }
+            if (filtered.size() >= 5) break;  // ✅ Increased from 3 to 5
         }
 
-        // If the filter knocked out everything, fall back to the original top 3,
-        // but still avoid dumping huge descriptions.
         if (filtered.isEmpty()) {
-            for (int i = 0; i < Math.min(3, results.size()); i++) {
+            for (int i = 0; i < Math.min(5, results.size()); i++) {
                 filtered.add(results.get(i));
             }
         }
 
         try {
-            // 2) Build concise context (no full CV dump)
+            // ✅ BUILD RICHER CONTEXT
             StringBuilder context = new StringBuilder();
             for (RagModel p : filtered) {
                 String name = p.getProductName();
                 String desc = p.getProductDescription();
                 BigDecimal price = p.getProductPrice();
 
-                if (desc != null && desc.length() > 400) {
-                    desc = desc.substring(0, 400) + "...";
+                // ✅ Increased context length
+                if (desc != null && desc.length() > 800) {
+                    desc = desc.substring(0, 800) + "...";
                 }
 
-                context.append("Item: ").append(name == null ? "" : name)
-                        .append("\nSummary: ").append(desc == null ? "" : desc)
-                        .append("\nPrice: ").append(price == null ? "" : price.toPlainString())
-                        .append("\n\n");
+                context.append("===\n")
+                        .append("Item: ").append(name == null ? "" : name).append("\n")
+                        .append("Details: ").append(desc == null ? "" : desc).append("\n")
+                        .append("Price: $").append(price == null ? "N/A" : price.toPlainString())
+                        .append("\n===\n\n");
             }
 
-            // 3) Strong instructions to the model
-            return chatClient
+            return ragChatClient
                     .prompt()
+                    .advisors(advisor -> advisor.param("conversationId", conversationId))
                     .system("""
-                           You are a professional medical support advisor (pharmacist / healthcare personnel style).
-                            
-                                INTRODUCTION & GREETINGS:
-                                - When the user says “hi”, “hello”, or greets you, respond warmly.
-                                - Use appropriate greetings like:
-                                  • “Good morning”
-                                  • “Good afternoon”
-                                  • “Good evening”
-                                  • “Hello, how are you doing?”
-                                - After greeting, briefly state your role, e.g.:
-                                  “I’m here to support you with health-related questions and guidance.”
-                                - Make it clear you provide medical support and advice, and that you will refer to a hospital when necessary.
-                            
-                                IMPORTANT ROLE LIMITS:
-                                - You are NOT a doctor.
-                                - You must NEVER give a final medical diagnosis.
-                                - You must NEVER claim to replace a hospital or physician.
-                            
-                                Your role:
-                                - Listen carefully to the user’s health complaint.
-                                - Respond like a calm, experienced real-life medical personnel.
-                                - Provide safe, practical medical advice and drug guidance.
-                                - Explain clearly, professionally, and with empathy.
-                                - If symptoms appear serious, worsening, unusual, or risky, clearly advise the user to visit a hospital or doctor.
-                            
-                                Language & tone rules:
-                                - Always reply in the SAME language the user uses.
-                                - If the user uses Nigerian Pidgin, reply in clear and respectful Pidgin.
-                                - If the user uses English, reply in friendly professional English.
-                                - Be polite, reassuring, and human — like a real healthcare worker.
-                            
-                                Medical safety rules:
-                                - Do NOT diagnose conditions.
-                                - Do NOT invent diseases.
-                                - You MAY suggest common medications and general usage guidance where appropriate.
-                                - Always include safety advice (e.g. dosage caution, take after food if needed).
-                                - Ask at most 1–2 short follow-up questions only when necessary.
-                                - If symptoms involve severe pain, bleeding, breathing difficulty, pregnancy, children, high fever, or long duration → clearly refer to a hospital immediately.
-                            
-                                How to use the provided knowledge:
-                                - Use ONLY medically relevant information from the provided context.
-                                - Summarize in simple, human language.
-                                - Do NOT dump long documents.
-                                - Connect advice naturally to the user’s symptoms.
-                        """)
-                    .user("User query: " + query + "\n\nRelevant items:\n" + context)
+                       You are a professional medical support advisor (pharmacist / healthcare personnel).
+                       
+                       INTRODUCTION & GREETINGS:
+                       - Respond warmly to greetings.
+                       - Use appropriate time-based greetings (Good morning/afternoon/evening).
+                       - After greeting, briefly state your role.
+                       
+                       IMPORTANT ROLE LIMITS:
+                       - You are NOT a doctor.
+                       - Never give final diagnoses.
+                       - Always clarify you provide support, not replace physicians.
+                       
+                       YOUR RESPONSIBILITIES:
+                       - Listen carefully to health complaints.
+                       - Provide safe, practical medical advice.
+                       - Explain medication guidance clearly.
+                       - Use empathy and professionalism.
+                       - Refer to hospitals for severe symptoms.
+                       
+                       RESPONSE STYLE:
+                       - Reply in the user's language.
+                       - Be conversational and human.
+                       - Use bullet points for clarity when listing information.
+                       - Provide 2-4 paragraph responses minimum.
+                       - Ask 1-2 follow-up questions when appropriate.
+                       
+                       MEDICAL SAFETY:
+                       - Do NOT diagnose conditions definitively.
+                       - Suggest OTC medications when appropriate.
+                       - Always mention "consult a doctor if symptoms persist or worsen."
+                       
+                       KNOWLEDGE BASE USAGE:
+                       - Use ONLY medically relevant information from the provided context.
+                       - Summarize in simple, human language.
+                       - Don't dump raw document text.
+                       - If context is sparse, acknowledge it and provide general guidance.
+                """)
+                    .user("User query: " + query + "\n\nRelevant medical knowledge:\n" + context)
                     .call()
                     .content();
 
         } catch (Exception e) {
+            System.err.println("❌ ChatClient error: " + e.getMessage());
             e.printStackTrace();
 
-            // 4) Fallback: short manual summary using the filtered list
-            StringBuilder summary = new StringBuilder();
-            summary.append("Here are some options I found for \"")
-                    .append(query)
-                    .append("\": ");
-
-            int limit = Math.min(filtered.size(), 3);
-            for (int i = 0; i < limit; i++) {
-                RagModel p = filtered.get(i);
-                if (i > 0) summary.append("; ");
-                summary.append(p.getProductName());
-
-                if (p.getProductPrice() != null) {
-                    summary.append(" (around $")
-                            .append(p.getProductPrice().toPlainString())
-                            .append(")");
-                }
-            }
-
-            if (filtered.size() > limit) {
-                summary.append(" and more.");
-            }
-
-            return summary.toString();
+            // ✅ Better fallback response
+            return buildFallbackResponse(query, filtered);
         }
     }
+
+    // ✅ NEW: Greeting detection
+    private boolean isGreeting(String query) {
+        return query.matches(".*(hi|hello|hey|good morning|good afternoon|good evening|greetings).*");
+    }
+
+    // ✅ NEW: Greeting handler
+    private String handleGreeting(String query, String conversationId) {
+        String timeOfDay = getTimeOfDay();
+
+        return ragChatClient
+                .prompt()
+                .advisors(advisor -> advisor.param("conversationId", conversationId))
+                .system("""
+                   You are a friendly medical support advisor.
+                   Respond warmly to the greeting.
+                   Use the appropriate time-based greeting.
+                   Briefly introduce yourself and offer help.
+                   Keep it conversational and welcoming.
+            """)
+                .user("User said: " + query + "\n\nTime of day: " + timeOfDay)
+                .call()
+                .content();
+    }
+
+    // ✅ NEW: Time-based greeting
+    private String getTimeOfDay() {
+        int hour = java.time.LocalTime.now().getHour();
+        if (hour < 12) return "morning";
+        if (hour < 17) return "afternoon";
+        return "evening";
+    }
+
+    // ✅ IMPROVED: Fallback response
+    private String buildFallbackResponse(String query, List<RagModel> filtered) {
+        if (filtered.isEmpty()) {
+            return "I'm here to assist with your health questions. Could you provide more details about your symptoms or the medication you're asking about?";
+        }
+
+        StringBuilder summary = new StringBuilder();
+        summary.append("Based on your query about \"").append(query).append("\", here's what I found:\n\n");
+
+        int limit = Math.min(filtered.size(), 3);
+        for (int i = 0; i < limit; i++) {
+            RagModel p = filtered.get(i);
+            summary.append("• ").append(p.getProductName());
+            if (p.getProductPrice() != null && p.getProductPrice().compareTo(BigDecimal.ONE) > 0) {
+                summary.append(" ($").append(p.getProductPrice().toPlainString()).append(")");
+            }
+            summary.append("\n");
+        }
+
+        summary.append("\nWould you like more details about any of these?");
+        return summary.toString();
+    }
+
+
+
     public long countTrainingDocuments() {
         return ragRepository.countTrainingDocuments();
     }
+
     public List<RagModel> getRecentTrainingDocs() {
         return ragRepository.findRecentTrainingDocs();
     }
-    private List<String> chunkText(String text) {
-        int CHUNK_SIZE = 1800;   // safe
-        int OVERLAP = 200;
 
+    private List<String> chunkText(String text) {
+        int CHUNK_SIZE = 1800;
+        int OVERLAP = 200;
         List<String> chunks = new ArrayList<>();
         int start = 0;
-
         while (start < text.length()) {
             int end = Math.min(start + CHUNK_SIZE, text.length());
             chunks.add(text.substring(start, end));
@@ -347,7 +347,4 @@ public class RagService {
         }
         return chunks;
     }
-
-
-
 }

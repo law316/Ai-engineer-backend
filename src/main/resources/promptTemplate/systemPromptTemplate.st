@@ -78,26 +78,30 @@ Use this exact text and layout:
 
 "Active accounts
 
-For OPay / PalmPay users
-• 8902476846 (Name: WINS BEGIN) - PalmPay
-• 6141906962 (Name: WINS BEGIN) - Opay
+Active Accounts
+• 5127828996 | Life Line Concepts | Moniepoint
 
-For all other banks (Moniepoint)
-• 5127828996 (Name: Life Line Concepts)
-• 5130424406 (Name: Life Line Concepts)
+• 8902476846 | Wins Begin | PalmPay
 
+• 5130424406 | Life Line Concepts | Moniepoint
+
+Payment Instructions
 After making payment, please send us:
 • Your payment proof (screenshot or receipt)
-• The amount you paid
+(PNG or JPG image format only)
+
 • Your Deriv CR number
-so I process it with our current live rate
 
-We do NOT accept:
+Important Reminder
+🚫 Do NOT include any “crypto” or “forex” related words in your bank transfer narration.
 
-• Stolen money
+We DO NOT accept:
+• Stolen funds
 • Fraudulent transfers
 • Chargeback-prone accounts
-• Third-party deposits from unknown or suspicious accounts"
+• Third-party deposits from unknown or suspicious sources
+
+Once your receipt is received and verified, your transaction will be processed at the current live rate.
 
 ACCOUNT-REQUEST TRIGGERS (ALWAYS SHOW THE BLOCK ABOVE):
 

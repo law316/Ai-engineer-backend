@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -47,20 +48,55 @@ public class RagController {
         }
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<?> searchProducts(@RequestParam("query") String query) {
+    /*@GetMapping("/search")
+    public ResponseEntity<?> searchProducts(
+            @RequestParam("query") String query,
+            @RequestParam("conversationId") String conversationId
+    ) {
         try {
             List<RagModel> results = ragService.search(query);
-            String aiResponse = ragService.makeNaturalResponse(query, results);
 
-            RagSearchResponse response = new RagSearchResponse(results, aiResponse);
+            String aiResponse =
+                    ragService.makeNaturalResponse(query, results, conversationId);
+
+            RagSearchResponse response =
+                    new RagSearchResponse(results, aiResponse);
+
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(400).body("Error: " + e.getMessage());
+            return ResponseEntity.status(400)
+                    .body("Error: " + e.getMessage());
+        }
+    }*/
+    // new one
+    @GetMapping("/search")
+    public ResponseEntity<?> searchProducts(
+            @RequestParam("query") String query,
+            @RequestParam(value = "conversationId", required = false) String conversationId
+    ) {
+        try {
+            if (conversationId == null || conversationId.isBlank()) {
+                conversationId = UUID.randomUUID().toString();
+            }
+
+            List<RagModel> results = ragService.search(query);
+            String aiResponse =
+                    ragService.makeNaturalResponse(query, results, conversationId);
+
+            return ResponseEntity.ok(
+                    new RagSearchResponse(results, aiResponse)
+            );
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest()
+                    .body("Error: " + e.getMessage());
         }
     }
+
+
 
     @GetMapping("/stats")
     public ResponseEntity<?> getRagStats() {
